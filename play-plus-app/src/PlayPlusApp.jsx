@@ -11,43 +11,20 @@ const PlayPlusApp = () => {
   const [currentQuest, setCurrentQuest] = useState(null);
   const [currentWorld, setCurrentWorld] = useState(null);
 
-  // Close glossary tooltip when clicking outside (mobile)
-  useEffect(() => {
-    if (!activeGlossaryTerm || !('ontouchstart' in window)) return;
-
-    const handleTouchOutside = (e) => {
-      // Check if touch is on a glossary term
-      const isGlossaryTouch = e.target.closest('[data-glossary-term]');
-      if (!isGlossaryTouch) {
-        setActiveGlossaryTerm(null);
-      }
-    };
-
-    // Add listener with a delay to avoid same touch that opened it
-    const timeoutId = setTimeout(() => {
-      document.addEventListener('touchstart', handleTouchOutside);
-    }, 150);
-
-    return () => {
-      clearTimeout(timeoutId);
-      document.removeEventListener('touchstart', handleTouchOutside);
-    };
-  }, [activeGlossaryTerm]);
-
-  // Helper function to parse markdown-style formatting (*bold* and _italic_)
+  // Helper functions
   const parseMarkdown = (text) => {
     if (!text) return text;
     const parts = [];
     let currentText = text;
     let key = 0;
-
+    
     while (currentText.length > 0) {
       const boldMatch = currentText.match(/\*([^*]+)\*/);
       const italicMatch = currentText.match(/_([^_]+)_/);
-
+      
       let nextMatch = null;
       let isBold = false;
-
+      
       if (boldMatch && italicMatch) {
         if (currentText.indexOf(boldMatch[0]) < currentText.indexOf(italicMatch[0])) {
           nextMatch = boldMatch;
@@ -61,222 +38,30 @@ const PlayPlusApp = () => {
       } else if (italicMatch) {
         nextMatch = italicMatch;
       }
-
+      
       if (!nextMatch) {
         parts.push(<span key={key++}>{currentText}</span>);
         break;
       }
-
+      
       const beforeText = currentText.substring(0, currentText.indexOf(nextMatch[0]));
       if (beforeText) parts.push(<span key={key++}>{beforeText}</span>);
-
+      
       if (isBold) {
         parts.push(<strong key={key++} style={{ fontWeight: '700', color: '#fbbf24' }}>{nextMatch[1]}</strong>);
       } else {
         parts.push(<em key={key++} style={{ fontStyle: 'italic' }}>{nextMatch[1]}</em>);
       }
-
+      
       currentText = currentText.substring(currentText.indexOf(nextMatch[0]) + nextMatch[0].length);
     }
-
+    
     return parts.length > 0 ? parts : text;
-  };
-
-  // Glossary Terms
-  const glossaryTerms = {
-    "Actions": "Discrete, uncoupled units of movement or response, often context-specific and spontaneous. Actions are the building blocks of skills.",
-    "Action Capacities": "The range of physical and mental abilities available to an individual or team during play. These capacities determine the feasibility and scope of actions, influencing the fluidity and effectiveness of interactions.",
-    // ... (I'll include just a few for brevity, you can add the rest)
-    "Awareness": "The broader perception that enables recognition of opportunities and informs attention; a foundational element in Play+.",
-    "Behavior": "A combination of actions and skills. Play+ avoids the term due to its broad, sometimes ambiguous usage.",
-  };
-
-  // Parse text and add glossary tooltips (first instance only per section)
-  const parseGlossaryTerms = (text, sectionId = 'default') => {
-    if (!text || typeof text !== 'string') return text;
-
-    const markedTermsKey = `marked_${sectionId}`;
-
-    // Track which terms we've already marked in this section
-    if (!window[markedTermsKey]) {
-      window[markedTermsKey] = new Set();
-    }
-
-    const parts = [];
-    let remaining = text;
-    let key = 0;
-
-    const handleTermInteraction = (term, event) => {
-      const termKey = `${sectionId}-${term}`;
-      setActiveGlossaryTerm(activeGlossaryTerm === termKey ? null : termKey);
-    };
-
-    const handleTouchStart = (term, event) => {
-      event.preventDefault();
-      event.stopPropagation();
-      const termKey = `${sectionId}-${term}`;
-      setActiveGlossaryTerm(activeGlossaryTerm === termKey ? null : termKey);
-    };
-
-    while (remaining.length > 0) {
-      let earliestMatch = null;
-      let earliestIndex = remaining.length;
-      let matchedTerm = null;
-
-      // Find the earliest unmarked glossary term
-      Object.keys(glossaryTerms).forEach(term => {
-        if (window[markedTermsKey].has(term)) return;
-
-        const index = remaining.indexOf(term);
-        if (index !== -1 && index < earliestIndex) {
-          earliestIndex = index;
-          earliestMatch = term;
-          matchedTerm = term;
-        }
-      });
-
-      if (!earliestMatch) {
-        // No more glossary terms, apply markdown to remaining text
-        const parsed = parseMarkdown(remaining);
-        parts.push(...(Array.isArray(parsed) ? parsed : [parsed]));
-        break;
-      }
-
-      // Add text before term (with markdown parsing)
-      if (earliestIndex > 0) {
-        const beforeText = remaining.substring(0, earliestIndex);
-        const parsed = parseMarkdown(beforeText);
-        parts.push(...(Array.isArray(parsed) ? parsed : [parsed]));
-      }
-
-      // Mark this term as used in this section
-      window[markedTermsKey].add(matchedTerm);
-
-      const termKey = `${sectionId}-${matchedTerm}`;
-      const isActive = activeGlossaryTerm === termKey;
-
-      // Add term with custom tooltip
-      parts.push(
-        <span
-          key={`glossary-${sectionId}-${key++}`}
-          style={{
-            position: 'relative',
-            display: 'inline-block'
-          }}
-        >
-          <span
-            data-glossary-term="true"
-            onTouchStart={(e) => handleTouchStart(matchedTerm, e)}
-            onMouseEnter={(e) => {
-              // Only show on hover for desktop (non-touch devices)
-              if (!('ontouchstart' in window)) {
-                handleTermInteraction(matchedTerm, e);
-              }
-            }}
-            onMouseLeave={(e) => {
-              // Only hide on mouse leave for desktop
-              if (!('ontouchstart' in window)) {
-                setActiveGlossaryTerm(null);
-              }
-            }}
-            style={{
-              borderBottom: '2px dotted #8b5cf6',
-              cursor: 'help',
-              background: isActive ? 'rgba(139, 92, 246, 0.1)' : 'transparent',
-              padding: '2px 4px',
-              display: 'inline',
-              boxDecorationBreak: 'clone',
-              WebkitBoxDecorationBreak: 'clone',
-              whiteSpace: 'normal',
-              WebkitTapHighlightColor: 'transparent'
-            }}
-          >
-            {matchedTerm}
-          </span>
-          {isActive && (
-            <span
-              className="glossary-tooltip"
-              style={{
-                position: 'absolute',
-                bottom: '100%',
-                left: '50%',
-                transform: 'translateX(-50%)',
-                marginBottom: '8px',
-                background: 'rgba(0, 0, 0, 0.95)',
-                color: '#e2e8f0',
-                padding: '12px 16px',
-                borderRadius: '8px',
-                fontSize: '14px',
-                lineHeight: '1.6',
-                maxWidth: 'min(300px, 90vw)',
-                width: 'max-content',
-                zIndex: 10000,
-                border: '1px solid #8b5cf6',
-                boxShadow: '0 8px 24px rgba(0, 0, 0, 0.4)',
-                pointerEvents: 'none',
-                whiteSpace: 'normal',
-                wordWrap: 'break-word'
-              }}
-            >
-              {glossaryTerms[matchedTerm]}
-              <span
-                style={{
-                  position: 'absolute',
-                  top: '100%',
-                  left: '50%',
-                  transform: 'translateX(-50%)',
-                  width: 0,
-                  height: 0,
-                  borderLeft: '6px solid transparent',
-                  borderRight: '6px solid transparent',
-                  borderTop: '6px solid #8b5cf6'
-                }}
-              />
-            </span>
-          )}
-        </span>
-      );
-
-      remaining = remaining.substring(earliestIndex + earliestMatch.length);
-    }
-
-    return parts;
-  };
-
-  const handleButtonHover = (key, event) => {
-    // Clear any existing timeout
-    if (tooltipTimeout) {
-      clearTimeout(tooltipTimeout);
-    }
-
-    // Set a delay before showing tooltip
-    const timeout = setTimeout(() => {
-      const rect = event.currentTarget.getBoundingClientRect();
-      setHoveredDimension(key);
-      setTooltipPosition({
-        x: rect.left + rect.width / 2,
-        y: rect.bottom + 8
-      });
-    }, 300); // 300ms delay
-
-    setTooltipTimeout(timeout);
-  };
-
-  const handleButtonLeave = () => {
-    if (tooltipTimeout) {
-      clearTimeout(tooltipTimeout);
-    }
-    setHoveredDimension(null);
-  };
-
-  const toggleGameDetails = (gameName) => {
-    setExpandedGame(expandedGame === gameName ? null : gameName);
-    setHoveredDimension(null); // Clear tooltip when clicking game
   };
 
   const navigateToGame = (gameName) => {
     setCurrentPage(gameName);
-    setHoveredDimension(null); // Clear tooltip when navigating
+    setHoveredDimension(null);
     window.scrollTo(0, 0);
   };
 
@@ -285,114 +70,158 @@ const PlayPlusApp = () => {
     window.scrollTo(0, 0);
   };
 
+  const toggleGameDetails = (gameName) => {
+    setExpandedGame(expandedGame === gameName ? null : gameName);
+    setHoveredDimension(null);
+  };
+
+  // Dimensions
   const dimensions = {
     presence: {
       name: 'PRIMAL GAMES',
       tagline: 'Start here → learn the game mechanics.',
       color: '#06b6d4',
       darkColor: '#164e63',
-      definition: 'Nine foundational games that teach you and your dog how to be present together. These are the building blocks for everything else.'
+      definition: 'Nine foundational games that teach you and your dog how to be present together.'
     },
     action: {
       name: 'FOUNDATION GAMES',
       tagline: 'Do things intentionally together.',
       color: '#10b981',
       darkColor: '#1e5f3f',
-      definition: 'Learn specific actions and skills through structured games. Build your basic repertoire of things you can do together.'
+      definition: 'Learn specific actions and skills through structured games.'
     },
     adapt: {
       name: 'ADAPTIVE GAMES',
       tagline: 'Learn how to flow and adjust.',
       color: '#06b6d4',
       darkColor: '#164e63',
-      definition: 'Take your skills into different contexts and situations. Learn to read each other and adjust on the fly.'
+      definition: 'Take your skills into different contexts and situations.'
     },
     perform: {
       name: 'PERFORMANCE GAMES',
       tagline: 'Show it, express it, play at level.',
       color: '#10b981',
       darkColor: '#1e5f3f',
-      definition: 'Put it all together with purpose. Compete, demonstrate, or express your partnership at its highest level.'
+      definition: 'Put it all together with purpose.'
     },
     quests: {
       name: 'QUESTS',
       tagline: 'Explore worlds of Play',
       color: '#fbbf24',
       darkColor: '#92400e',
-      definition: 'Journey through structured learning paths that weave games together into meaningful narratives. Quests guide your exploration of the PLAY+ framework.'
+      definition: 'Journey through structured learning paths.'
     },
     glossary: {
       name: 'GLOSSARY',
       tagline: 'Key terms and concepts.',
       color: '#8b5cf6',
       darkColor: '#4c1d95',
-      definition: 'Essential PLAY+ terminology. Capitalization matters - these terms have specific meanings in the PLAY+ framework.'
+      definition: 'Essential PLAY+ terminology.'
     }
   };
 
+  // Primal Games - ALL 9 with full data
   const primalGames = [
-    {
-      game: "Where is the Trigger?",
-      skill: "Awareness/Attention",
+    { 
+      game: "Where is the Trigger?", 
+      skill: "Awareness/Attention", 
       icon: "?",
-      definition: "Scanning the whole environment vs. locking onto one thing",
-      details: {
-        whatYouLearn: "You'll learn how to create a clean gap between cue and trigger for cooperative action.",
-        whatDogLearns: "Your dog learns to settle into calm expectancy and scan for the trigger moment.",
-        howItHappens: "You cue, pause, and trigger. The dog's awareness opens during the pause.",
-        videoUrl: "https://www.youtube.com/embed/VQ6x-oKUxJ0",
-      }
+      definition: "Learning to read the moment of action"
     },
-    // Add more games as needed...
+    { 
+      game: "This-Wait...Next!", 
+      skill: "Initiative/Anticipation", 
+      icon: "⏸",
+      definition: "Building tension and resolution"
+    },
+    { 
+      game: "Where is the Handler?", 
+      skill: "Dismissal/Engagement", 
+      icon: "🏃",
+      definition: "Creating value through attention"
+    },
+    { 
+      game: "Why is the Handler?", 
+      skill: "Affordance/Partnership", 
+      icon: "🎮",
+      definition: "Handler as gateway to opportunities"
+    },
+    { 
+      game: "This, That, the Other", 
+      skill: "Flow/Function", 
+      icon: "⚫",
+      definition: "Sequencing skills smoothly"
+    },
+    { 
+      game: "Which Way?", 
+      skill: "Coupled Movement/Team Movement", 
+      icon: "↔️",
+      definition: "Reading and responding to pressure"
+    },
+    { 
+      game: "What's Next?", 
+      skill: "Coupling/Opportunity", 
+      icon: "🔄",
+      definition: "Reading transitions and flow"
+    },
+    { 
+      game: "What Am I Doing Here?", 
+      skill: "Presence/Synergy", 
+      icon: "⭐",
+      definition: "Handler awareness and intentionality"
+    },
+    { 
+      game: "Give & Take", 
+      skill: "Passing/Possession", 
+      icon: "⇄",
+      definition: "Bite mechanics and possession flow"
+    }
   ];
 
+  // Foundation Games
   const foundationGames = [
-    {
-      name: "Luring Game",
-      category: "Default Games",
-      description: "Following targets",
-      icon: "🍪",
-      details: {
-        whatYouLearn: "How to lure with gamified, attuned affect.",
-        whatDogLearns: "That opportunities must be seized!",
-        howItHappens: "Taking actions and skills you have and attempting to lure the dog.",
-      }
-    },
-    // Add more games...
+    { name: "Luring Game", category: "Default Games", description: "Following targets", icon: "🍪" },
+    { name: "Take It!", category: "Default Games", description: "Basic object interaction", icon: "🎯" },
+    { name: "Bite Game", category: "Default Games", description: "Grip and release control", icon: "🦷" },
+    { name: "Drop Game", category: "Default Games", description: "Clean disc release", icon: "💿" },
+    { name: "Give Game", category: "Default Games", description: "Voluntary surrender", icon: "🤝" },
+    { name: "Attention Game", category: "Default Games", description: "Focus and connection", icon: "👁️" },
+    { name: "Find It!", category: "Games", description: "Search and locate", icon: "🔍" },
+    { name: "Capturing Game", category: "Default Games", description: "Marking natural behaviors", icon: "📸" },
+    { name: "Shaping Game", category: "Default Games", description: "Progressive approximation", icon: "🎯" },
+    { name: "Duration Game", category: "Games", description: "Sustained positions", icon: "⏱️" },
+    { name: "Chasing Game", category: "Games", description: "Pursuit dynamics", icon: "🏃" },
+    { name: "It's Yer Choice", category: "Games", description: "Impulse control foundation", icon: "✋" },
+    { name: "Pressure Game", category: "Games", description: "Working through pressure", icon: "💪" },
+    { name: "Threshold Game", category: "Games", description: "Boundary awareness", icon: "🚪" }
   ];
 
-  // Home Page Component
+  // Home Page
   const HomePage = () => (
     <div style={{
       minHeight: '100vh',
       background: 'linear-gradient(135deg, #1a1a2e 0%, #16213e 100%)',
       padding: '40px 20px',
-      fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif'
+      fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif'
     }}>
       <div style={{ maxWidth: '1200px', margin: '0 auto' }}>
-
+        
         <div style={{ textAlign: 'center', marginBottom: '50px' }}>
-          <h1 style={{
-            color: 'white',
-            fontSize: '48px',
+          <h1 style={{ 
+            color: 'white', 
+            fontSize: '48px', 
             marginBottom: '10px',
-            fontWeight: '700',
-            letterSpacing: '-1px'
+            fontWeight: '700'
           }}>
             PLAY+
           </h1>
-          <p style={{
-            color: '#94a3b8',
-            fontSize: '20px',
-            fontWeight: '300',
-            marginBottom: '8px'
-          }}>
+          <p style={{ color: '#94a3b8', fontSize: '20px', marginBottom: '8px' }}>
             The four dimensions of training your dog as a partner
           </p>
-          <p style={{
-            color: '#64748b',
+          <p style={{ 
+            color: '#64748b', 
             fontSize: '16px',
-            fontWeight: '400',
             fontFamily: 'monospace',
             letterSpacing: '2px'
           }}>
@@ -404,7 +233,7 @@ const PlayPlusApp = () => {
           display: 'grid',
           gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))',
           gap: '20px',
-          marginBottom: '40px',
+          marginBottom: '40px'
         }}>
           {Object.entries(dimensions).map(([key, dim]) => (
             <button
@@ -419,8 +248,8 @@ const PlayPlusApp = () => {
                 backgroundColor: activeTab === key ? dim.color : dim.darkColor,
                 color: 'white',
                 transform: activeTab === key ? 'translateY(-4px)' : 'translateY(0)',
-                boxShadow: activeTab === key
-                  ? `0 10px 30px ${dim.color}80`
+                boxShadow: activeTab === key 
+                  ? `0 10px 30px ${dim.color}80` 
                   : '0 4px 6px rgba(0, 0, 0, 0.3)',
                 textAlign: 'left',
                 display: 'flex',
@@ -428,19 +257,10 @@ const PlayPlusApp = () => {
                 gap: '8px'
               }}
             >
-              <span style={{
-                fontSize: '22px',
-                fontWeight: '700',
-                letterSpacing: '-0.5px'
-              }}>
+              <span style={{ fontSize: '22px', fontWeight: '700' }}>
                 {dim.name}
               </span>
-              <span style={{
-                fontSize: '14px',
-                fontWeight: '300',
-                color: 'rgba(255, 255, 255, 0.85)',
-                lineHeight: '1.4'
-              }}>
+              <span style={{ fontSize: '14px', fontWeight: '300', opacity: 0.85 }}>
                 {dim.tagline}
               </span>
             </button>
@@ -453,31 +273,41 @@ const PlayPlusApp = () => {
           padding: '30px',
           minHeight: '400px'
         }}>
-          <h2 style={{ color: 'white', fontSize: '32px', marginBottom: '16px' }}>
-            {dimensions[activeTab].name}
-          </h2>
-          <p style={{ color: '#94a3b8', fontSize: '16px' }}>
-            {dimensions[activeTab].definition}
-          </p>
-
           {activeTab === 'presence' && (
-            <div style={{ marginTop: '24px' }}>
+            <div>
+              <h3 style={{ color: '#06b6d4', fontSize: '24px', marginBottom: '16px' }}>Primal Games</h3>
+              <p style={{ color: '#94a3b8', fontSize: '14px', marginBottom: '20px' }}>
+                Nine foundational games that teach you and your dog how to be present together
+              </p>
               {primalGames.map((game, idx) => (
                 <div key={idx} style={{
                   background: 'rgba(6, 182, 212, 0.1)',
                   padding: '16px',
                   borderRadius: '8px',
-                  marginBottom: '12px'
-                }}>
-                  <h3 style={{ color: '#06b6d4', marginBottom: '8px' }}>{game.game}</h3>
-                  <p style={{ color: '#cbd5e1', fontSize: '14px' }}>{game.definition}</p>
+                  marginBottom: '12px',
+                  cursor: 'pointer'
+                }}
+                onClick={() => navigateToGame(game.game)}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                    <span style={{ fontSize: '24px' }}>{game.icon}</span>
+                    <div>
+                      <h4 style={{ color: 'white', margin: 0, marginBottom: '4px' }}>{game.game}</h4>
+                      <p style={{ color: '#fbbf24', fontSize: '14px', margin: 0 }}>{game.skill}</p>
+                      <p style={{ color: '#cbd5e1', fontSize: '13px', margin: 0, marginTop: '4px' }}>{game.definition}</p>
+                    </div>
+                  </div>
                 </div>
               ))}
             </div>
           )}
 
           {activeTab === 'action' && (
-            <div style={{ marginTop: '24px' }}>
+            <div>
+              <h3 style={{ color: '#10b981', fontSize: '24px', marginBottom: '16px' }}>Foundation Games</h3>
+              <p style={{ color: '#94a3b8', fontSize: '14px', marginBottom: '20px' }}>
+                Learn specific actions and skills through structured games
+              </p>
               {foundationGames.map((game, idx) => (
                 <div key={idx} style={{
                   background: 'rgba(16, 185, 129, 0.1)',
@@ -485,10 +315,44 @@ const PlayPlusApp = () => {
                   borderRadius: '8px',
                   marginBottom: '12px'
                 }}>
-                  <h3 style={{ color: '#10b981', marginBottom: '8px' }}>{game.name}</h3>
-                  <p style={{ color: '#cbd5e1', fontSize: '14px' }}>{game.description}</p>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                    <span style={{ fontSize: '24px' }}>{game.icon}</span>
+                    <div>
+                      <h4 style={{ color: 'white', margin: 0, marginBottom: '4px' }}>{game.name}</h4>
+                      <p style={{ color: '#10b981', fontSize: '14px', margin: 0 }}>{game.category}</p>
+                      <p style={{ color: '#cbd5e1', fontSize: '13px', margin: 0, marginTop: '4px' }}>{game.description}</p>
+                    </div>
+                  </div>
                 </div>
               ))}
+            </div>
+          )}
+
+          {activeTab === 'adapt' && (
+            <div style={{ textAlign: 'center', padding: '40px' }}>
+              <h3 style={{ color: '#06b6d4', fontSize: '24px', marginBottom: '16px' }}>Adaptive Games</h3>
+              <p style={{ color: '#cbd5e1' }}>Coming soon! These games will teach you how to adapt and flow in different contexts.</p>
+            </div>
+          )}
+
+          {activeTab === 'perform' && (
+            <div style={{ textAlign: 'center', padding: '40px' }}>
+              <h3 style={{ color: '#10b981', fontSize: '24px', marginBottom: '16px' }}>Performance Games</h3>
+              <p style={{ color: '#cbd5e1' }}>Coming soon! Put it all together with purpose and skill.</p>
+            </div>
+          )}
+
+          {activeTab === 'quests' && (
+            <div style={{ textAlign: 'center', padding: '40px' }}>
+              <h3 style={{ color: '#fbbf24', fontSize: '24px', marginBottom: '16px' }}>Quests</h3>
+              <p style={{ color: '#cbd5e1' }}>Coming soon! Structured learning paths through the PLAY+ framework.</p>
+            </div>
+          )}
+
+          {activeTab === 'glossary' && (
+            <div style={{ textAlign: 'center', padding: '40px' }}>
+              <h3 style={{ color: '#8b5cf6', fontSize: '24px', marginBottom: '16px' }}>Glossary</h3>
+              <p style={{ color: '#cbd5e1' }}>Coming soon! Essential PLAY+ terminology and concepts.</p>
             </div>
           )}
         </div>
@@ -496,7 +360,139 @@ const PlayPlusApp = () => {
     </div>
   );
 
-  return currentPage === 'home' ? <HomePage /> : <div>Game Page Coming Soon...</div>;
+  const GamePage = () => {
+    const game = primalGames.find(g => g.game === currentPage);
+    
+    if (!game) {
+      return (
+        <div style={{
+          minHeight: '100vh',
+          background: 'linear-gradient(135deg, #1a1a2e 0%, #16213e 100%)',
+          padding: '40px 20px',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center'
+        }}>
+          <div style={{ textAlign: 'center', color: 'white' }}>
+            <h1>Game not found</h1>
+            <button onClick={navigateHome} style={{
+              background: '#06b6d4',
+              color: 'white',
+              border: 'none',
+              padding: '14px 28px',
+              borderRadius: '8px',
+              fontSize: '16px',
+              fontWeight: '600',
+              cursor: 'pointer',
+              marginTop: '20px'
+            }}>
+              ← Back to All Games
+            </button>
+          </div>
+        </div>
+      );
+    }
+
+    return (
+      <div style={{
+        minHeight: '100vh',
+        background: 'linear-gradient(135deg, #1a1a2e 0%, #16213e 100%)',
+        padding: '40px 20px',
+        fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif'
+      }}>
+        <div style={{ maxWidth: '900px', margin: '0 auto' }}>
+          
+          <button 
+            onClick={navigateHome}
+            style={{
+              background: 'transparent',
+              border: 'none',
+              color: '#64748b',
+              fontSize: '14px',
+              cursor: 'pointer',
+              marginBottom: '20px'
+            }}
+          >
+            ← Back to Primal Games
+          </button>
+
+          <div style={{
+            background: 'rgba(6, 182, 212, 0.1)',
+            border: '2px solid #06b6d4',
+            borderRadius: '16px',
+            padding: '40px',
+            marginBottom: '40px'
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '16px', marginBottom: '16px' }}>
+              {game.icon && <span style={{ fontSize: '48px' }}>{game.icon}</span>}
+              <div>
+                <h1 style={{ color: 'white', fontSize: '42px', margin: '0 0 8px 0', fontWeight: '700' }}>
+                  {game.game}
+                </h1>
+                <div style={{
+                  display: 'inline-block',
+                  background: '#06b6d4',
+                  color: 'white',
+                  padding: '6px 16px',
+                  borderRadius: '20px',
+                  fontSize: '14px',
+                  fontWeight: '600'
+                }}>
+                  PRIMAL GAME
+                </div>
+              </div>
+            </div>
+            
+            {game.skill && (
+              <div style={{ color: '#fbbf24', fontSize: '20px', fontWeight: '600', marginTop: '20px' }}>
+                Primal Skill: {game.skill}
+              </div>
+            )}
+            {game.definition && (
+              <div style={{ color: '#94a3b8', fontSize: '16px', marginTop: '8px', fontStyle: 'italic' }}>
+                {game.definition}
+              </div>
+            )}
+          </div>
+
+          <div style={{
+            background: 'rgba(255, 255, 255, 0.05)',
+            borderRadius: '12px',
+            padding: '32px',
+            marginBottom: '24px'
+          }}>
+            <h2 style={{ color: '#fbbf24', fontSize: '24px', fontWeight: '700', marginBottom: '20px' }}>
+              📖 About This Game
+            </h2>
+            <p style={{ color: '#cbd5e1', fontSize: '16px', lineHeight: '1.7' }}>
+              This is one of the nine foundational Primal Games in the PLAY+ framework. 
+              Each game teaches a specific skill that builds the foundation for advanced play and partnership with your dog.
+            </p>
+          </div>
+
+          <div style={{ textAlign: 'center', marginTop: '32px' }}>
+            <button
+              onClick={navigateHome}
+              style={{
+                background: '#06b6d4',
+                color: 'white',
+                border: 'none',
+                padding: '14px 28px',
+                borderRadius: '8px',
+                fontSize: '16px',
+                fontWeight: '600',
+                cursor: 'pointer'
+              }}
+            >
+              ← Back to All Games
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  return currentPage === 'home' ? <HomePage /> : <GamePage />;
 };
 
 export default PlayPlusApp;
